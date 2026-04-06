@@ -5,4 +5,5 @@ export class ErrorsMessages {
   static FORBIDDEN = "Forbidden access.";
   static INVALID_CREDENTIALS = "Invalid email or password.";
   static INTERNAL_SERVER_ERROR = "An internal server error occurred.";
+  static CONFLICT = "Resource already exists.";
 }
