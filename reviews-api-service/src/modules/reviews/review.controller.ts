@@ -1,11 +1,13 @@
 import { NextFunction, Response } from "express";
 import { HttpStatusText } from "../../types/HTTPStatusText";
+import { ReviewQueueService } from "./review.queue";
 import {
   CreateReviewRequest,
   ReviewIdRequest,
   UpdateReviewRequest,
 } from "./review.type";
 import { ReviewService } from "./review.service";
+import { SuccessMessages } from "../../types/successMessages";
 
 export class ReviewController {
   static async list(req: ReviewIdRequest, res: Response, next: NextFunction) {
@@ -27,14 +29,13 @@ export class ReviewController {
     next: NextFunction,
   ) {
     try {
-      const result = await ReviewService.create(req.body);
+      const job = await ReviewQueueService.enqueueCreate(req.body);
 
       res.status(202).json({
         status: HttpStatusText.SUCCESS,
         data: {
-          reviewId: result.review.id,
-          analysisJobId: result.analysis.jobId,
-          sentiment: result.analysis.predictedSentiment,
+          jobId: job.id,
+          status: SuccessMessages.QUEUED,
         },
       });
     } catch (err) {
@@ -61,7 +62,7 @@ export class ReviewController {
     next: NextFunction,
   ) {
     try {
-      const result = await ReviewService.update({
+      const job = await ReviewQueueService.enqueueUpdate({
         ...req.params,
         ...req.body,
       });
@@ -69,9 +70,8 @@ export class ReviewController {
       res.status(202).json({
         status: HttpStatusText.SUCCESS,
         data: {
-          reviewId: result.review.id,
-          analysisJobId: result.analysis.jobId,
-          sentiment: result.analysis.predictedSentiment,
+          jobId: job.id,
+          status: SuccessMessages.QUEUED,
         },
       });
     } catch (err) {

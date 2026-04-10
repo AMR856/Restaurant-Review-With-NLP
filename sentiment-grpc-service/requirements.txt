@@ -1,0 +1,6 @@
+transformers
+torch
+grpcio
+grpcio-tools
+protobuf
+python-dotenv

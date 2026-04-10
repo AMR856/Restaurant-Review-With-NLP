@@ -2,11 +2,21 @@ import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { ReviewController } from "./review.controller";
+import { ReviewQueueService } from "./review.queue";
 import { ReviewService } from "./review.service";
 
 jest.mock("./review.service");
+jest.mock("./review.queue", () => ({
+  ReviewQueueService: {
+    enqueueCreate: jest.fn(),
+    enqueueUpdate: jest.fn(),
+  },
+}));
 
 const mockedReviewService = ReviewService as jest.Mocked<typeof ReviewService>;
+const mockedReviewQueueService = ReviewQueueService as jest.Mocked<
+  typeof ReviewQueueService
+>;
 
 const app = express();
 app.use(express.json());
@@ -35,9 +45,8 @@ describe("ReviewController", () => {
 
   describe("POST /reviews", () => {
     it("should accept review creation and return 202", async () => {
-      mockedReviewService.create.mockResolvedValue({
-        review: { id: "review-1" },
-        analysis: { jobId: "job-1", predictedSentiment: "positive" },
+      mockedReviewQueueService.enqueueCreate.mockResolvedValue({
+        id: "job-1",
       } as any);
 
       const res = await request(app).post("/reviews").send({
@@ -46,8 +55,8 @@ describe("ReviewController", () => {
       });
 
       expect(res.status).toBe(202);
-      expect(res.body.data.reviewId).toBe("review-1");
-      expect(res.body.data.sentiment).toBe("positive");
+      expect(res.body.data.jobId).toBe("job-1");
+      expect(res.body.data.status).toBe("queued");
     });
   });
 
@@ -64,9 +73,8 @@ describe("ReviewController", () => {
 
   describe("PATCH /reviews/:id", () => {
     it("should accept review update and return 202", async () => {
-      mockedReviewService.update.mockResolvedValue({
-        review: { id: "1" },
-        analysis: { jobId: "job-1", predictedSentiment: "positive" },
+      mockedReviewQueueService.enqueueUpdate.mockResolvedValue({
+        id: "job-2",
       } as any);
 
       const res = await request(app).patch("/reviews/1").send({
@@ -74,8 +82,8 @@ describe("ReviewController", () => {
       });
 
       expect(res.status).toBe(202);
-      expect(res.body.data.reviewId).toBe("1");
-      expect(res.body.data.sentiment).toBe("positive");
+      expect(res.body.data.jobId).toBe("job-2");
+      expect(res.body.data.status).toBe("queued");
     });
   });
 

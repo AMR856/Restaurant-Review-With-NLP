@@ -2,3 +2,16 @@ node_modules/
 .env
 coverage/
 .venv/
+generated/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+*.db
+*.bak
+*.swp
+.DS_Store
+.vscode/
+venv/

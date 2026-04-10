@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package sentiment;
+
+service SentimentAnalyzer {
+  rpc AnalyzeReview (AnalyzeReviewRequest) returns (AnalyzeReviewResponse);
+}
+
+message AnalyzeReviewRequest {
+  string review = 1;
+}
+
+message AnalyzeReviewResponse {
+  string sentiment = 1;
+  float confidence = 2;
+}

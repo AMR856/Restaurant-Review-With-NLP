@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import CustomError from "../../types/customError";
+import { RestaurantRedisService } from "../restaurants/restaurant.redis";
 import { ReviewModel } from "./review.model";
-import { ReviewQueueService } from "./review.queue";
+import { ReviewNlpService } from "./review.nlp";
 import { ReviewService } from "./review.service";
 
 jest.mock("./review.model", () => ({
@@ -15,14 +16,25 @@ jest.mock("./review.model", () => ({
   },
 }));
 
-jest.mock("./review.queue", () => ({
-  ReviewQueueService: {
-    enqueueAnalysis: jest.fn(),
+jest.mock("./review.nlp", () => ({
+  ReviewNlpService: {
+    analyze: jest.fn(),
+  },
+}));
+
+jest.mock("../restaurants/restaurant.redis", () => ({
+  RestaurantRedisService: {
+    applyReviewSentimentChange: jest.fn(),
   },
 }));
 
 const mockedReviewModel = ReviewModel as jest.Mocked<typeof ReviewModel>;
-const mockedQueueService = ReviewQueueService as jest.Mocked<typeof ReviewQueueService>;
+const mockedReviewNlpService = ReviewNlpService as jest.Mocked<
+  typeof ReviewNlpService
+>;
+const mockedRestaurantRedisService = RestaurantRedisService as jest.Mocked<
+  typeof RestaurantRedisService
+>;
 
 describe("ReviewService", () => {
   beforeEach(() => {
@@ -31,7 +43,9 @@ describe("ReviewService", () => {
 
   describe("list", () => {
     it("should return all reviews", async () => {
-      mockedReviewModel.findAll.mockResolvedValue([{ id: "1", content: "Good" }] as any);
+      mockedReviewModel.findAll.mockResolvedValue([
+        { id: "1", content: "Good" },
+      ] as any);
 
       const result = await ReviewService.list();
 
@@ -47,13 +61,18 @@ describe("ReviewService", () => {
         restaurantId: "restaurant-1",
       } as any);
 
-      mockedQueueService.enqueueAnalysis.mockResolvedValue({
-        jobId: "job-1",
-        reviewId: "review-1",
-        restaurantId: "restaurant-1",
+      mockedReviewModel.update.mockResolvedValue({
+        id: "review-1",
         content: "Great food",
-        predictedSentiment: "positive",
+        restaurantId: "restaurant-1",
+        sentiment: "positive",
+        confidence: 0.99,
       } as any);
+
+      mockedReviewNlpService.analyze.mockResolvedValue({
+        sentiment: "positive",
+        confidence: 0.99,
+      });
 
       const result = await ReviewService.create({
         restaurantId: "restaurant-1",
@@ -66,18 +85,22 @@ describe("ReviewService", () => {
         sentiment: null,
         confidence: null,
       });
-      expect(mockedQueueService.enqueueAnalysis).toHaveBeenCalledWith({
-        reviewId: "review-1",
-        restaurantId: "restaurant-1",
-        content: "Great food",
-      });
+      expect(mockedReviewNlpService.analyze).toHaveBeenCalledWith("Great food");
+      expect(mockedRestaurantRedisService.applyReviewSentimentChange).toHaveBeenCalledWith(
+        "restaurant-1",
+        null,
+        "positive",
+      );
       expect(result.analysis.predictedSentiment).toBe("positive");
     });
   });
 
   describe("getById", () => {
     it("should return a review by id", async () => {
-      mockedReviewModel.findById.mockResolvedValue({ id: "1", content: "Good" } as any);
+      mockedReviewModel.findById.mockResolvedValue({
+        id: "1",
+        content: "Good",
+      } as any);
 
       const result = await ReviewService.getById({ id: "1" });
 
@@ -87,7 +110,9 @@ describe("ReviewService", () => {
     it("should throw if review not found", async () => {
       mockedReviewModel.findById.mockResolvedValue(null);
 
-      await expect(ReviewService.getById({ id: "1" })).rejects.toThrow(CustomError);
+      await expect(ReviewService.getById({ id: "1" })).rejects.toThrow(
+        CustomError,
+      );
     });
   });
 
@@ -97,21 +122,27 @@ describe("ReviewService", () => {
         id: "1",
         content: "Old",
         restaurantId: "restaurant-1",
+        sentiment: "negative",
       } as any);
 
-      mockedReviewModel.update.mockResolvedValue({
-        id: "1",
-        content: "New",
-        restaurantId: "restaurant-1",
-      } as any);
+      mockedReviewModel.update
+        .mockResolvedValueOnce({
+          id: "1",
+          content: "New",
+          restaurantId: "restaurant-1",
+        } as any)
+        .mockResolvedValueOnce({
+          id: "1",
+          content: "New",
+          restaurantId: "restaurant-1",
+          sentiment: "positive",
+          confidence: 0.88,
+        } as any);
 
-      mockedQueueService.enqueueAnalysis.mockResolvedValue({
-        jobId: "job-1",
-        reviewId: "1",
-        restaurantId: "restaurant-1",
-        content: "New",
-        predictedSentiment: "positive",
-      } as any);
+      mockedReviewNlpService.analyze.mockResolvedValue({
+        sentiment: "positive",
+        confidence: 0.88,
+      });
 
       const result = await ReviewService.update({
         id: "1",
@@ -123,6 +154,11 @@ describe("ReviewService", () => {
         sentiment: null,
         confidence: null,
       });
+      expect(mockedRestaurantRedisService.applyReviewSentimentChange).toHaveBeenCalledWith(
+        "restaurant-1",
+        "negative",
+        "positive",
+      );
       expect(result.analysis.predictedSentiment).toBe("positive");
     });
 
@@ -137,19 +173,30 @@ describe("ReviewService", () => {
 
   describe("remove", () => {
     it("should delete a review", async () => {
-      mockedReviewModel.findById.mockResolvedValue({ id: "1" } as any);
+      mockedReviewModel.findById.mockResolvedValue({
+        id: "1",
+        restaurantId: "restaurant-1",
+        sentiment: "positive",
+      } as any);
       mockedReviewModel.delete.mockResolvedValue({ id: "1" } as any);
 
       const result = await ReviewService.remove({ id: "1" });
 
       expect(result).toEqual({ id: "1" });
       expect(mockedReviewModel.delete).toHaveBeenCalledWith("1");
+      expect(mockedRestaurantRedisService.applyReviewSentimentChange).toHaveBeenCalledWith(
+        "restaurant-1",
+        "positive",
+        null,
+      );
     });
 
     it("should throw if review not found", async () => {
       mockedReviewModel.findById.mockResolvedValue(null);
 
-      await expect(ReviewService.remove({ id: "1" })).rejects.toThrow(CustomError);
+      await expect(ReviewService.remove({ id: "1" })).rejects.toThrow(
+        CustomError,
+      );
     });
   });
 });

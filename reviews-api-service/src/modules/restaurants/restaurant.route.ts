@@ -23,6 +23,25 @@ const router = Router();
  *         updatedAt:
  *           type: string
  *           format: date-time
+ *     RestaurantCreateInput:
+ *       type: object
+ *       required:
+ *         - name
+ *       additionalProperties: false
+ *       properties:
+ *         name:
+ *           type: string
+ *           minLength: 1
+ *           maxLength: 120
+ *     RestaurantUpdateInput:
+ *       type: object
+ *       additionalProperties: false
+ *       properties:
+ *         name:
+ *           type: string
+ *           minLength: 1
+ *           maxLength: 120
+ *       minProperties: 1
  */
 
 /**
@@ -50,7 +69,7 @@ router.get("/", RestaurantController.list);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Restaurant'
+ *             $ref: '#/components/schemas/RestaurantCreateInput'
  *     responses:
  *       201:
  *         description: Restaurant created successfully
@@ -99,6 +118,12 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RestaurantUpdateInput'
  *     responses:
  *       200:
  *         description: Restaurant updated successfully
